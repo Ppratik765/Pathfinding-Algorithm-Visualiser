@@ -1,13 +1,15 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { clsx } from 'clsx';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Trees, Waves } from 'lucide-react'; // Added Icons
 import { runAlgorithm, generateMazeRecursiveDivision } from '../algorithms';
 
 const ROW_COUNT = 20; 
 const COL_COUNT = 45; 
 
-// WEIGHT_COST: 1 is normal, 5 is mud
-const MUD_WEIGHT = 5;
+// WEIGHT COSTS
+const COST_FOREST = 3;
+const COST_MUD = 5;
+const COST_WATER = 10;
 
 const createNode = (col, row, startRow = 8, startCol = 5, finishRow = 8, finishCol = 35) => {
   return {
@@ -20,7 +22,8 @@ const createNode = (col, row, startRow = 8, startCol = 5, finishRow = 8, finishC
     f: Infinity,
     isVisited: false,
     isWall: false,
-    weight: 1, // Default weight
+    weight: 1, 
+    terrainType: 'none', // 'none', 'forest', 'mud', 'water'
     previousNode: null,
     nextNode: null,
   };
@@ -41,14 +44,12 @@ const getInitialGrid = () => {
 export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, masterGridState = null, onGridUpdate, winStatus, drawMode, is3D }, ref) => {
   const [grid, setGrid] = useState(getInitialGrid());
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
-  const [dragNode, setDragNode] = useState(null); // 'start' or 'finish'
+  const [dragNode, setDragNode] = useState(null);
   const [executionTime, setExecutionTime] = useState(0);
   const [showReplay, setShowReplay] = useState(false);
 
-  // Sync with master grid if in comparison mode
   useEffect(() => {
     if (masterGridState && isComparison) {
-        // Deep copy visual state from master but reset algorithms
         const newGrid = masterGridState.map(row => 
             row.map(node => ({
                 ...node, 
@@ -73,16 +74,13 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
   const runAnimation = () => {
       setShowReplay(false);
-      
       const container = document.getElementById(`grid-container-${algoType}`);
       if(container) {
-          const visited = container.querySelectorAll('.node-visited');
-          const paths = container.querySelectorAll('.node-path');
-          visited.forEach(el => el.classList.remove('node-visited'));
-          paths.forEach(el => el.classList.remove('node-path'));
+          container.querySelectorAll('.node-visited, .node-path').forEach(el => 
+            el.classList.remove('node-visited', 'node-path')
+          );
       }
 
-      // Soft Reset
       for (let row of grid) {
           for (let node of row) {
               node.distance = Infinity;
@@ -125,21 +123,16 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
-            const visited = container.querySelectorAll('.node-visited');
-            const paths = container.querySelectorAll('.node-path');
-            visited.forEach(el => el.classList.remove('node-visited'));
-            paths.forEach(el => el.classList.remove('node-path'));
+             container.querySelectorAll('.node-visited, .node-path').forEach(el => 
+                el.classList.remove('node-visited', 'node-path')
+            );
         }
-        if(!isComparison) {
-            setGrid(getInitialGrid()); 
-        }
+        if(!isComparison) setGrid(getInitialGrid()); 
     },
     clearWalls: () => {
-        // Keeps start/end where they are, but removes walls/weights
         const { start, finish } = findStartFinish(grid);
         const newGrid = getInitialGrid().map(row => 
             row.map(node => {
-                // Restore current start/end positions
                 const isS = node.row === start.row && node.col === start.col;
                 const isF = node.row === finish.row && node.col === finish.col;
                 return { ...node, isStart: isS, isFinish: isF };
@@ -150,7 +143,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
-            container.querySelectorAll('.node-visited, .node-path').forEach(el => 
+             container.querySelectorAll('.node-visited, .node-path').forEach(el => 
                 el.classList.remove('node-visited', 'node-path')
             );
         }
@@ -160,8 +153,6 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         if(isComparison) return;
         setExecutionTime(0);
         setShowReplay(false);
-        
-        // Clear visuals
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
              container.querySelectorAll('.node-visited, .node-path').forEach(el => 
@@ -200,24 +191,12 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     }
   };
 
-  // --- MOUSE HANDLERS ---
   const handleMouseDown = (row, col) => {
     if(isComparison) return;
     const node = grid[row][col];
-    
-    // Check if dragging start/end
-    if (node.isStart) {
-        setDragNode('start');
-        setMouseIsPressed(true);
-        return;
-    }
-    if (node.isFinish) {
-        setDragNode('finish');
-        setMouseIsPressed(true);
-        return;
-    }
+    if (node.isStart) { setDragNode('start'); setMouseIsPressed(true); return; }
+    if (node.isFinish) { setDragNode('finish'); setMouseIsPressed(true); return; }
 
-    // Normal Draw
     const newGrid = toggleNode(grid, row, col, drawMode);
     setGrid(newGrid);
     setMouseIsPressed(true);
@@ -226,25 +205,18 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
   const handleMouseEnter = (row, col) => {
     if (!mouseIsPressed || isComparison) return;
-    
-    // Handle Dragging Nodes
     if (dragNode) {
         const newGrid = moveSpecialNode(grid, row, col, dragNode);
         setGrid(newGrid);
         if(onGridUpdate) onGridUpdate(newGrid);
         return;
     }
-
-    // Handle Drawing
     const newGrid = toggleNode(grid, row, col, drawMode);
     setGrid(newGrid);
     if(onGridUpdate) onGridUpdate(newGrid);
   };
 
-  const handleMouseUp = () => {
-    setMouseIsPressed(false);
-    setDragNode(null);
-  };
+  const handleMouseUp = () => { setMouseIsPressed(false); setDragNode(null); };
 
   const borderClass = winStatus === 'winner' ? 'ring-4 ring-green-500 shadow-green-500/50' 
                    : winStatus === 'loser' ? 'ring-4 ring-red-500 shadow-red-500/50'
@@ -263,7 +235,6 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
       <div 
         id={`grid-container-${algoType}`}
-        // 3D Tilt Applied Here
         className={clsx(
             "bg-white dark:bg-dark-panel p-1 rounded shadow-xl leading-[0] relative transition-all duration-500", 
             borderClass,
@@ -271,8 +242,9 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         )}
         style={is3D ? { transform: 'rotateX(25deg) scale(0.9)', transformStyle: 'preserve-3d' } : {}}
       >
+        {/* Replay Button - Z-Index 100 to stay on top */}
         {showReplay && (
-            <button onClick={runAnimation} className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-[1px] transition-all opacity-0 hover:opacity-100 group-hover:opacity-100">
+            <button onClick={runAnimation} className="absolute inset-0 z-[100] flex items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-[1px] transition-all opacity-0 hover:opacity-100 group-hover:opacity-100">
                 <div className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-2xl transform hover:scale-110 transition-transform">
                     <RotateCcw size={24} className="text-blue-600 dark:text-blue-400" />
                 </div>
@@ -282,19 +254,27 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         {grid.map((row, rowIdx) => (
           <div key={rowIdx} className="flex">
             {row.map((node, nodeIdx) => {
-              const { row, col, isFinish, isStart, isWall, weight } = node;
+              const { row, col, isFinish, isStart, isWall, weight, terrainType } = node;
               
               let extraClass = '';
-              if (isStart) extraClass = 'node-start cursor-grab active:cursor-grabbing z-20 scale-110';
-              else if (isFinish) extraClass = 'node-end cursor-grab active:cursor-grabbing z-20 scale-110';
+              let innerContent = null;
+
+              if (isStart) extraClass = 'node-start cursor-grab active:cursor-grabbing z-50 scale-110';
+              else if (isFinish) extraClass = 'node-end cursor-grab active:cursor-grabbing z-50 scale-110';
               else if (isWall) {
-                  extraClass = 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white';
-                  if(is3D) extraClass += ' shadow-[2px_2px_0px_rgba(0,0,0,0.3)] transform translate-z-4'; // Pop up effect
+                  extraClass = 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white z-10';
+                  if(is3D) extraClass += ' shadow-[2px_2px_0px_rgba(0,0,0,0.3)] transform translate-z-4'; 
               }
-              else if (weight > 1) {
-                  // MUD visual
-                  extraClass = 'bg-weight dark:bg-amber-900 border-amber-800 opacity-90';
-                  // Optional: Add an icon via background-image in CSS, but color is enough
+              else if (terrainType === 'mud') {
+                  extraClass = 'bg-mud dark:bg-amber-900 border-amber-800 opacity-90';
+              }
+              else if (terrainType === 'forest') {
+                  extraClass = 'bg-green-100 dark:bg-green-900/50 border-green-200 dark:border-green-800';
+                  innerContent = <Trees size={14} className="text-forest dark:text-green-400 opacity-80" />;
+              }
+              else if (terrainType === 'water') {
+                  extraClass = 'bg-blue-100 dark:bg-blue-900/40 border-blue-200 dark:border-blue-800';
+                  innerContent = <Waves size={14} className="text-water dark:text-blue-400 opacity-80" />;
               }
 
               return (
@@ -302,18 +282,20 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
                         key={nodeIdx}
                         id={`node-${algoType}-${row}-${col}`}
                         className={clsx(
-                            "w-5 h-5 border-[0.5px] border-blue-50/20 inline-block select-none relative transition-transform", 
+                            "w-5 h-5 border-[0.5px] border-blue-50/20 inline-flex items-center justify-center select-none relative transition-transform", 
                             extraClass
                         )}
                         onMouseDown={() => handleMouseDown(row, col)}
                         onMouseEnter={() => handleMouseEnter(row, col)}
                         onMouseUp={handleMouseUp}
                     >
-                        {weight > 1 && !isStart && !isFinish && !isWall && (
-                            <div className="w-full h-full flex items-center justify-center opacity-30 text-[8px]">
-                                ⨉
-                            </div>
-                        )}
+                       {/* Render Icon if Forest or Water */}
+                       {!isStart && !isFinish && !isWall && innerContent}
+                       
+                       {/* Cross for mud if no specific icon */}
+                       {terrainType === 'mud' && !isStart && !isFinish && (
+                            <div className="w-full h-full flex items-center justify-center opacity-30 text-[8px] text-white">⨉</div>
+                       )}
                     </div>
               );
             })}
@@ -332,12 +314,24 @@ const toggleNode = (grid, row, col, mode) => {
   
   const newNode = { ...node };
   
+  // Logic: Clicking the same thing removes it
   if (mode === 'wall') {
       newNode.isWall = !newNode.isWall;
-      newNode.weight = 1; // Wall overrides weight
-  } else if (mode === 'weight') {
-      newNode.isWall = false; // Weight overrides wall
-      newNode.weight = newNode.weight === 1 ? MUD_WEIGHT : 1;
+      newNode.terrainType = 'none';
+      newNode.weight = 1;
+  } else {
+      // It's a terrain tool
+      newNode.isWall = false;
+      if (newNode.terrainType === mode) {
+          // Toggle off
+          newNode.terrainType = 'none';
+          newNode.weight = 1;
+      } else {
+          newNode.terrainType = mode;
+          if(mode === 'mud') newNode.weight = COST_MUD;
+          if(mode === 'forest') newNode.weight = COST_FOREST;
+          if(mode === 'water') newNode.weight = COST_WATER;
+      }
   }
   
   newGrid[row][col] = newNode;
@@ -348,19 +342,16 @@ const toggleNode = (grid, row, col, mode) => {
 const moveSpecialNode = (grid, row, col, type) => {
     const newGrid = grid.slice();
     const node = newGrid[row][col];
-    
-    if (node.isWall) return newGrid; // Can't drag onto wall
+    if (node.isWall) return newGrid; 
     if (type === 'start' && node.isFinish) return newGrid;
     if (type === 'finish' && node.isStart) return newGrid;
 
-    // Remove old special node
     const currentGrid = newGrid.map(r => r.map(n => {
         if (type === 'start' && n.isStart) return { ...n, isStart: false };
         if (type === 'finish' && n.isFinish) return { ...n, isFinish: false };
         return n;
     }));
 
-    // Set new special node
     currentGrid[row][col] = {
         ...currentGrid[row][col],
         isStart: type === 'start',
