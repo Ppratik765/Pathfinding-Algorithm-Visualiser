@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Grid } from './components/Grid';
-import { Play, RefreshCw, Moon, Sun, BrickWall, Eraser, MousePointer2, Plus, Minus, Info, Box, TreePine, Droplets, Footprints } from 'lucide-react';
+import { Play, RefreshCw, Moon, Sun, BrickWall, Eraser, MousePointer2, Plus, Minus, Info, Box, TentTree } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function App() {
@@ -8,21 +8,18 @@ function App() {
   const [activeAlgos, setActiveAlgos] = useState(['dijkstra']);
   const [results, setResults] = useState({});
   const [masterGrid, setMasterGrid] = useState(null);
-  
-  // New States
-  const [currentTool, setCurrentTool] = useState('wall'); // wall, mud, forest, water, eraser
-  const [mazeType, setMazeType] = useState('prims'); // recursive, prims
+  const [drawMode, setDrawMode] = useState('wall'); // 'wall' or 'weight'
   const [is3D, setIs3D] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
-
+  
   const gridRefs = useRef({});
 
   const allAlgorithms = [
-      { value: 'dijkstra', label: 'Dijkstra (Weighted)' },
-      { value: 'astar', label: 'A* Search (Weighted)' },
-      { value: 'greedy', label: 'Greedy Best-First (Weighted)' },
-      { value: 'bfs', label: 'BFS (Unweighted)' },
-      { value: 'dfs', label: 'DFS (Unweighted)' },
+      { value: 'dijkstra', label: 'Dijkstra Algorithm' },
+      { value: 'astar', label: 'A* Search' },
+      { value: 'bfs', label: 'Breadth-First Search (BFS)' },
+      { value: 'dfs', label: 'Depth-First Search (DFS)' },
+      { value: 'greedy', label: 'Greedy Best-First Search' },
       { value: 'bidirectional', label: 'Bidirectional BFS' },
   ];
 
@@ -58,19 +55,43 @@ function App() {
       }, 100);
   };
 
-  // ... (Keep addAlgorithm, removeAlgorithm, handleAlgoChange, handleFinish, getWinStatus SAME as before)
-  const addAlgorithm = () => { if (activeAlgos.length < 4) { const unused = allAlgorithms.find(a => !activeAlgos.includes(a.value)); if (unused) setActiveAlgos([...activeAlgos, unused.value]); }};
-  const removeAlgorithm = () => { if (activeAlgos.length > 1) { const newAlgos = [...activeAlgos]; newAlgos.pop(); setActiveAlgos(newAlgos); setResults({}); }};
-  const handleAlgoChange = (index, newValue) => { const newAlgos = [...activeAlgos]; newAlgos[index] = newValue; setActiveAlgos(newAlgos); setResults({}); };
-  const handleFinish = (algo, time) => { setResults(prev => ({ ...prev, [algo]: time })); };
+  const addAlgorithm = () => {
+      if (activeAlgos.length >= 4) return;
+      const unused = allAlgorithms.find(a => !activeAlgos.includes(a.value));
+      if (unused) setActiveAlgos([...activeAlgos, unused.value]);
+  };
+
+  const removeAlgorithm = () => {
+      if (activeAlgos.length > 1) {
+          const newAlgos = [...activeAlgos];
+          newAlgos.pop();
+          setActiveAlgos(newAlgos);
+          setResults({});
+      }
+  };
+
+  const handleAlgoChange = (index, newValue) => {
+      const newAlgos = [...activeAlgos];
+      newAlgos[index] = newValue;
+      setActiveAlgos(newAlgos);
+      setResults({});
+  };
+
+  const handleFinish = (algo, time) => {
+      setResults(prev => ({ ...prev, [algo]: time }));
+  };
+
   const getWinStatus = (algo) => {
       if (activeAlgos.length === 1) return 'unknown';
       const times = Object.values(results);
       if (times.length === 0) return 'unknown';
       const myTime = results[algo];
       if (!myTime) return 'unknown';
+
       const minTime = Math.min(...times);
-      if (times.length === activeAlgos.length) return myTime === minTime ? 'winner' : 'loser';
+      if (times.length === activeAlgos.length) {
+          return myTime === minTime ? 'winner' : 'loser';
+      }
       return 'unknown';
   };
 
@@ -79,117 +100,112 @@ function App() {
       
       {/* Instructions Modal */}
       {showInstructions && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl max-w-lg w-full relative border border-gray-200 dark:border-gray-700">
-                  <button onClick={() => setShowInstructions(false)} className="absolute top-4 right-4 text-gray-500 hover:text-red-500 font-bold">✕</button>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white dark:bg-dark-panel p-6 rounded-2xl shadow-2xl max-w-lg w-full border border-gray-200 dark:border-gray-700">
                   <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                      <Info className="text-blue-500"/> Project Guide
+                      <Info className="text-blue-500" /> How to use
                   </h2>
-                  <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300 overflow-y-auto max-h-[60vh] pr-2">
-                      <section>
-                          <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-1">1. Moving Start/End</h3>
-                          <p>Click and drag the Green (Start) or Red (Target) nodes to move them anywhere.</p>
-                      </section>
-                      <section>
-                          <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-1">2. Terrain & Weights</h3>
-                          <p>Select different brushes to draw terrain. Algorithms like Dijkstra & A* will avoid these if possible.</p>
-                          <ul className="list-disc ml-5 mt-1 space-y-1">
-                              <li><span className="font-bold">Mud (Brown)</span>: Cost 5</li>
-                              <li><span className="font-bold">Forest (Green)</span>: Cost 10</li>
-                              <li><span className="font-bold">Water (Blue)</span>: Cost 50</li>
-                          </ul>
-                      </section>
-                      <section>
-                          <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-1">3. Maze Generation</h3>
-                          <p>Use the "Random Maze" button.</p>
-                          <ul className="list-disc ml-5 mt-1 space-y-1">
-                              <li><span className="font-bold">Recursive Division</span>: Blocky, square corridors.</li>
-                              <li><span className="font-bold">Prim's Algorithm</span>: Organic, river-like paths.</li>
-                          </ul>
-                      </section>
-                      <section>
-                          <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-1">4. 3D Mode</h3>
-                          <p>Toggle "3D View" to tilt the board. Walls will pop up like 3D blocks!</p>
-                      </section>
+                  <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+                      <p><strong>🖱️ Draw Walls/Weights:</strong> Click and drag on the grid. Select "Wall" or "Weight" from the controls.</p>
+                      <p><strong>🎯 Move Nodes:</strong> Drag the <span className="text-green-500 font-bold">Start</span> or <span className="text-red-500 font-bold">Target</span> icons to new positions.</p>
+                      <p><strong>🧱 Weights (Mud):</strong> Dark brown squares are "Mud" (Cost = 5). Weighted algorithms (Dijkstra, A*) will try to avoid them. Unweighted ones (BFS) will get stuck in them!</p>
+                      <p><strong>🎲 Comparison:</strong> Use the <span className="font-bold">+</span> button to add more algorithms and race them.</p>
+                      <p><strong>🧊 3D Mode:</strong> Click the Cube icon to toggle a 3D perspective view.</p>
                   </div>
+                  <button 
+                    onClick={() => setShowInstructions(false)}
+                    className="mt-6 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold"
+                  >
+                    Got it!
+                  </button>
               </div>
           </div>
       )}
 
       {/* Header */}
-      <div className="w-full max-w-6xl flex justify-between items-center mb-4 px-2">
+      <div className="w-full max-w-6xl flex justify-between items-center mb-4">
         <div>
             <h1 className="text-2xl font-extrabold tracking-tight">
             Pathfinding <span className="text-blue-600 dark:text-blue-400">Visualizer</span>
             </h1>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-2">
             <button 
                 onClick={() => setShowInstructions(true)}
-                className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:scale-110 transition-transform shadow-sm"
+                className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:scale-110 transition-transform shadow-sm"
                 title="Instructions"
             >
-                <Info size={20}/>
+                <Info size={20} className="text-blue-600 dark:text-blue-400"/>
             </button>
             <button 
                 onClick={() => setDarkMode(!darkMode)}
                 className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:scale-110 transition-transform shadow-sm"
+                title="Toggle Theme"
             >
                 {darkMode ? <Sun size={20} className="text-yellow-400"/> : <Moon size={20} className="text-gray-600"/>}
             </button>
         </div>
       </div>
 
-      {/* Tool & Legend Bar */}
-      <div className="w-full max-w-5xl mb-4 flex flex-col lg:flex-row justify-between items-center gap-4 bg-white dark:bg-dark-panel p-3 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-         
-         {/* Drawing Tools */}
-         <div className="flex flex-wrap gap-2 justify-center">
-            <ToolButton tool="wall" current={currentTool} set={setCurrentTool} icon={<BrickWall size={14}/>} label="Wall" color="bg-gray-800 text-white dark:bg-white dark:text-black"/>
-            <ToolButton tool="mud" current={currentTool} set={setCurrentTool} icon={<Footprints size={14}/>} label="Mud (5)" color="bg-amber-700 text-white"/>
-            <ToolButton tool="forest" current={currentTool} set={setCurrentTool} icon={<TreePine size={14}/>} label="Forest (10)" color="bg-emerald-700 text-white"/>
-            <ToolButton tool="water" current={currentTool} set={setCurrentTool} icon={<Droplets size={14}/>} label="Water (50)" color="bg-cyan-700 text-white"/>
-            <ToolButton tool="eraser" current={currentTool} set={setCurrentTool} icon={<Eraser size={14}/>} label="Eraser" color="bg-gray-200 text-gray-800"/>
-         </div>
-
-         {/* Settings */}
-         <div className="flex items-center gap-4 border-l border-gray-300 dark:border-gray-600 pl-4">
-             <div className="flex flex-col">
-                 <label className="text-[10px] text-gray-400 font-bold uppercase">Maze Style</label>
-                 <select 
-                    value={mazeType} 
-                    onChange={(e) => setMazeType(e.target.value)}
-                    className="bg-transparent text-sm font-bold focus:outline-none dark:text-gray-200"
-                 >
-                     <option value="prims">Organic (Prim's)</option>
-                     <option value="recursive">Blocky (Recursive)</option>
-                 </select>
+      {/* Instructions & Legend */}
+      <div className="w-full max-w-4xl mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-dark-panel p-3 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+         <div className="flex flex-col gap-1">
+            <h3 className="font-bold flex items-center gap-2 text-xs uppercase text-gray-400">
+                <MousePointer2 size={14} /> Legend
+            </h3>
+            <div className="flex flex-wrap gap-3 text-xs font-medium">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-green-500 border border-green-600 rounded-sm"></div> <span>Start</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-red-500 border border-red-600 rounded-full"></div> <span>Target</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-gray-800 dark:bg-white border-gray-900 dark:border-white rounded-sm"></div> <span>Wall</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-weight dark:bg-amber-900 border-amber-800 rounded-sm opacity-80"></div> <span>Weight (Mud)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-500 border border-blue-600 rounded-sm"></div> <span>Visited</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-yellow-400 border border-yellow-500 rounded-sm"></div> <span>Path</span>
+                </div>
              </div>
-
-             <button 
-                onClick={() => setIs3D(!is3D)}
-                className={clsx(
-                    "flex flex-col items-center justify-center p-2 rounded-lg transition-all",
-                    is3D ? "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300" : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
-                )}
-                title="Toggle 3D View"
-             >
-                 <Box size={20} />
-                 <span className="text-[9px] font-bold uppercase">3D View</span>
-             </button>
          </div>
       </div>
 
       {/* Control Bar */}
-      <div className="bg-white dark:bg-dark-panel p-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-wrap gap-2 items-center justify-center mb-6 w-full max-w-4xl z-10 sticky top-2">
+      <div className="bg-white dark:bg-dark-panel p-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-wrap gap-3 items-center justify-center mb-6 w-full max-w-4xl z-10 sticky top-2">
+        
+        {/* Draw Mode Toggles */}
+        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
+            <button 
+                onClick={() => setDrawMode('wall')}
+                className={clsx("flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-all", drawMode === 'wall' ? "bg-white dark:bg-gray-600 shadow text-gray-800 dark:text-white" : "text-gray-500 hover:text-gray-700")}
+            >
+                <BrickWall size={14} /> Wall
+            </button>
+            <button 
+                onClick={() => setDrawMode('weight')}
+                className={clsx("flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-all", drawMode === 'weight' ? "bg-white dark:bg-gray-600 shadow text-amber-800 dark:text-amber-400" : "text-gray-500 hover:text-gray-700")}
+            >
+                <TentTree size={14} /> Weight
+            </button>
+        </div>
+
+        <div className="h-6 w-px bg-gray-300 dark:bg-gray-600 hidden md:block"></div>
+
+        {/* Algo Selectors */}
         <div className="flex gap-2 items-center bg-gray-50 dark:bg-gray-800/50 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
             {activeAlgos.map((currentAlgo, idx) => (
                 <select 
                     key={idx}
                     value={currentAlgo} 
                     onChange={(e) => handleAlgoChange(idx, e.target.value)}
-                    className="px-2 py-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none max-w-[100px] sm:max-w-none"
+                    className="px-2 py-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none w-32"
                 >
                     {allAlgorithms.map(opt => (
                         (opt.value === currentAlgo || !activeAlgos.includes(opt.value)) && 
@@ -197,14 +213,35 @@ function App() {
                     ))}
                 </select>
             ))}
+            
             <div className="flex flex-col gap-0.5 ml-1">
-                <button onClick={addAlgorithm} disabled={activeAlgos.length >= 4} className="p-0.5 bg-gray-200 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded disabled:opacity-30"><Plus size={10} /></button>
-                <button onClick={removeAlgorithm} disabled={activeAlgos.length <= 1} className="p-0.5 bg-gray-200 hover:bg-red-100 text-gray-600 hover:text-red-600 rounded disabled:opacity-30"><Minus size={10} /></button>
+                <button onClick={addAlgorithm} disabled={activeAlgos.length >= 4} className="p-0.5 bg-gray-200 hover:bg-green-100 text-gray-600 hover:text-green-600 rounded disabled:opacity-30">
+                    <Plus size={10} />
+                </button>
+                <button onClick={removeAlgorithm} disabled={activeAlgos.length <= 1} className="p-0.5 bg-gray-200 hover:bg-red-100 text-gray-600 hover:text-red-600 rounded disabled:opacity-30">
+                    <Minus size={10} />
+                </button>
             </div>
         </div>
-        <div className="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
-        <button onClick={handleRun} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-transform active:scale-95 text-xs uppercase tracking-wider"><Play size={14} /> Run</button>
-        <button onClick={handleReset} className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400 rounded-lg font-bold text-xs"><RefreshCw size={14} /> Reset</button>
+
+        <div className="h-6 w-px bg-gray-300 dark:bg-gray-600 hidden md:block"></div>
+
+        <button onClick={handleRun} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-transform active:scale-95 text-xs uppercase tracking-wider">
+          <Play size={14} /> Run
+        </button>
+
+        <button onClick={handleReset} className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400 rounded-lg font-bold text-xs">
+          <RefreshCw size={14} /> Reset
+        </button>
+
+        <button 
+            onClick={() => setIs3D(!is3D)}
+            className={clsx("flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-xs transition-all border", is3D ? "bg-purple-100 border-purple-300 text-purple-700" : "bg-gray-100 border-transparent text-gray-500")}
+            title="Toggle 3D View"
+        >
+            <Box size={14} /> 3D
+        </button>
+
       </div>
 
       {/* Grids Container */}
@@ -219,12 +256,13 @@ function App() {
                     onGridUpdate={index === 0 ? setMasterGrid : undefined}
                     onFinish={handleFinish}
                     winStatus={getWinStatus(algo)}
-                    currentTool={currentTool}
-                    mazeType={mazeType}
+                    drawMode={drawMode}
                     is3D={is3D}
                 />
                 {index > 0 && (
-                     <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none backdrop-blur-sm">Linked to Master</div>
+                     <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded pointer-events-none backdrop-blur-sm">
+                        Linked to Master
+                    </div>
                 )}
             </div>
         ))}
@@ -232,26 +270,22 @@ function App() {
 
       {/* Bottom Floating Controls */}
       <div className="fixed bottom-6 flex gap-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-2 px-4 rounded-full shadow-2xl border border-gray-200 dark:border-gray-600 z-50">
-        <button onClick={handleGenerateMaze} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-xs shadow-lg transition-all hover:-translate-y-1"><BrickWall size={14} /> Random Maze</button>
-        <button onClick={handleClearWalls} className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-full font-bold text-xs shadow transition-all"><Eraser size={14} /> Clear Board</button>
+        <button 
+            onClick={handleGenerateMaze}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-xs shadow-lg transition-all hover:-translate-y-1"
+        >
+            <BrickWall size={14} /> Random Maze
+        </button>
+        <button 
+            onClick={handleClearWalls}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-full font-bold text-xs shadow transition-all"
+        >
+            <Eraser size={14} /> Clear Board
+        </button>
       </div>
 
     </div>
   );
 }
-
-const ToolButton = ({ tool, current, set, icon, label, color }) => (
-    <button 
-        onClick={() => set(tool)}
-        className={clsx(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
-            current === tool 
-                ? `${color} border-transparent ring-2 ring-offset-1 ring-blue-500 shadow-md transform scale-105` 
-                : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-        )}
-    >
-        {icon} <span>{label}</span>
-    </button>
-);
 
 export default App;
