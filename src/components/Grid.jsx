@@ -1,6 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { clsx } from 'clsx';
-import { RotateCcw, Trees, Waves } from 'lucide-react'; // Added Icons
+import { RotateCcw, Trees, Waves } from 'lucide-react';
 import { runAlgorithm, generateMazeRecursiveDivision } from '../algorithms';
 
 const ROW_COUNT = 20; 
@@ -23,7 +23,7 @@ const createNode = (col, row, startRow = 8, startCol = 5, finishRow = 8, finishC
     isVisited: false,
     isWall: false,
     weight: 1, 
-    terrainType: 'none', // 'none', 'forest', 'mud', 'water'
+    terrainType: 'none', 
     previousNode: null,
     nextNode: null,
   };
@@ -223,7 +223,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
                    : 'border border-gray-200 dark:border-gray-700';
 
   return (
-    <div className="flex flex-col items-center relative group" style={{ perspective: '1000px' }}>
+    <div className="flex flex-col items-center relative group" style={{ perspective: '1200px' }}>
        <div className="mb-0.5 flex justify-between w-full px-1 text-[10px] sm:text-xs font-mono font-bold text-gray-600 dark:text-gray-300 leading-tight">
          <span className="uppercase">{algoType}</span>
          <span className={clsx("transition-opacity duration-300", executionTime > 0 ? "opacity-100" : "opacity-0", 
@@ -238,7 +238,9 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         className={clsx(
             "bg-white dark:bg-dark-panel p-1 rounded shadow-xl leading-[0] relative transition-all duration-500", 
             borderClass,
-            is3D && "transform rotate-x-12 scale-95 shadow-2xl"
+            // 3D FIX: transform-style-3d ensures children are processed in 3D space
+            // pb-12 adds invisible padding at bottom so rotated grid doesn't clip mouse events
+            is3D && "transform rotate-x-12 scale-95 shadow-2xl pb-8"
         )}
         style={is3D ? { transform: 'rotateX(25deg) scale(0.9)', transformStyle: 'preserve-3d' } : {}}
       >
@@ -263,6 +265,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
               else if (isFinish) extraClass = 'node-end cursor-grab active:cursor-grabbing z-50 scale-110';
               else if (isWall) {
                   extraClass = 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white z-10';
+                  // Added z-translation for 3D effect
                   if(is3D) extraClass += ' shadow-[2px_2px_0px_rgba(0,0,0,0.3)] transform translate-z-4'; 
               }
               else if (terrainType === 'mud') {
@@ -289,10 +292,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
                         onMouseEnter={() => handleMouseEnter(row, col)}
                         onMouseUp={handleMouseUp}
                     >
-                       {/* Render Icon if Forest or Water */}
                        {!isStart && !isFinish && !isWall && innerContent}
-                       
-                       {/* Cross for mud if no specific icon */}
                        {terrainType === 'mud' && !isStart && !isFinish && (
                             <div className="w-full h-full flex items-center justify-center opacity-30 text-[8px] text-white">⨉</div>
                        )}
@@ -314,16 +314,13 @@ const toggleNode = (grid, row, col, mode) => {
   
   const newNode = { ...node };
   
-  // Logic: Clicking the same thing removes it
   if (mode === 'wall') {
       newNode.isWall = !newNode.isWall;
       newNode.terrainType = 'none';
       newNode.weight = 1;
   } else {
-      // It's a terrain tool
       newNode.isWall = false;
       if (newNode.terrainType === mode) {
-          // Toggle off
           newNode.terrainType = 'none';
           newNode.weight = 1;
       } else {
@@ -338,7 +335,6 @@ const toggleNode = (grid, row, col, mode) => {
   return newGrid;
 };
 
-// Helper: Move Start or Finish
 const moveSpecialNode = (grid, row, col, type) => {
     const newGrid = grid.slice();
     const node = newGrid[row][col];
