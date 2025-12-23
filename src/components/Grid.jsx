@@ -46,6 +46,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
   const [dragNode, setDragNode] = useState(null);
   const [executionTime, setExecutionTime] = useState(0);
+  const [pathCost, setPathCost] = useState(0); // New State for Cost
   const [showReplay, setShowReplay] = useState(false);
 
   useEffect(() => {
@@ -101,6 +102,10 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
       
       const timeTaken = (endTime - startTime).toFixed(2);
       
+      // Calculate Total Path Cost
+      const totalCost = path.reduce((sum, node) => sum + node.weight, 0);
+      setPathCost(totalCost);
+
       for (let i = 0; i <= visitedNodesInOrder.length; i++) {
         if (i === visitedNodesInOrder.length) {
           setTimeout(() => {
@@ -120,6 +125,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     animate() { runAnimation(); },
     reset: () => {
         setExecutionTime(0);
+        setPathCost(0);
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
@@ -140,6 +146,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         );
         setGrid(newGrid);
         setExecutionTime(0);
+        setPathCost(0);
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
@@ -152,6 +159,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     generateMaze() {
         if(isComparison) return;
         setExecutionTime(0);
+        setPathCost(0);
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
         if(container) {
@@ -224,12 +232,13 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
   return (
     <div className="flex flex-col items-center relative group" style={{ perspective: '1200px' }}>
+       {/* Updated Header with COST */}
        <div className="mb-0.5 flex justify-between w-full px-1 text-[10px] sm:text-xs font-mono font-bold text-gray-600 dark:text-gray-300 leading-tight">
          <span className="uppercase">{algoType}</span>
          <span className={clsx("transition-opacity duration-300", executionTime > 0 ? "opacity-100" : "opacity-0", 
              winStatus === 'winner' ? 'text-green-600 dark:text-green-400 font-extrabold' : 'text-gray-600 dark:text-gray-400'
          )}>
-            {executionTime}ms
+            {executionTime}ms • Cost: {pathCost}
          </span>
       </div>
 
@@ -238,13 +247,10 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         className={clsx(
             "bg-white dark:bg-dark-panel p-1 rounded shadow-xl leading-[0] relative transition-all duration-500", 
             borderClass,
-            // 3D FIX: transform-style-3d ensures children are processed in 3D space
-            // pb-12 adds invisible padding at bottom so rotated grid doesn't clip mouse events
             is3D && "transform rotate-x-12 scale-95 shadow-2xl pb-8"
         )}
         style={is3D ? { transform: 'rotateX(25deg) scale(0.9)', transformStyle: 'preserve-3d' } : {}}
       >
-        {/* Replay Button - Z-Index 100 to stay on top */}
         {showReplay && (
             <button onClick={runAnimation} className="absolute inset-0 z-[100] flex items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-[1px] transition-all opacity-0 hover:opacity-100 group-hover:opacity-100">
                 <div className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-2xl transform hover:scale-110 transition-transform">
@@ -265,12 +271,9 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
               else if (isFinish) extraClass = 'node-end cursor-grab active:cursor-grabbing z-50 scale-110';
               else if (isWall) {
                   extraClass = 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white z-10';
-                  // Added z-translation for 3D effect
                   if(is3D) extraClass += ' shadow-[2px_2px_0px_rgba(0,0,0,0.3)] transform translate-z-4'; 
               }
-              else if (terrainType === 'mud') {
-                  extraClass = 'bg-mud dark:bg-amber-900 border-amber-800 opacity-90';
-              }
+              else if (terrainType === 'mud') extraClass = 'bg-mud dark:bg-amber-900 border-amber-800 opacity-90';
               else if (terrainType === 'forest') {
                   extraClass = 'bg-green-100 dark:bg-green-900/50 border-green-200 dark:border-green-800';
                   innerContent = <Trees size={14} className="text-forest dark:text-green-400 opacity-80" />;
@@ -313,7 +316,6 @@ const toggleNode = (grid, row, col, mode) => {
   if(node.isStart || node.isFinish) return newGrid;
   
   const newNode = { ...node };
-  
   if (mode === 'wall') {
       newNode.isWall = !newNode.isWall;
       newNode.terrainType = 'none';
@@ -330,7 +332,6 @@ const toggleNode = (grid, row, col, mode) => {
           if(mode === 'water') newNode.weight = COST_WATER;
       }
   }
-  
   newGrid[row][col] = newNode;
   return newGrid;
 };
@@ -341,18 +342,11 @@ const moveSpecialNode = (grid, row, col, type) => {
     if (node.isWall) return newGrid; 
     if (type === 'start' && node.isFinish) return newGrid;
     if (type === 'finish' && node.isStart) return newGrid;
-
     const currentGrid = newGrid.map(r => r.map(n => {
         if (type === 'start' && n.isStart) return { ...n, isStart: false };
         if (type === 'finish' && n.isFinish) return { ...n, isFinish: false };
         return n;
     }));
-
-    currentGrid[row][col] = {
-        ...currentGrid[row][col],
-        isStart: type === 'start',
-        isFinish: type === 'finish'
-    };
-
+    currentGrid[row][col] = { ...currentGrid[row][col], isStart: type === 'start', isFinish: type === 'finish' };
     return currentGrid;
 };
