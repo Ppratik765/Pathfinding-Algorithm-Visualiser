@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class', // <--- Enable class-based dark mode
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -11,8 +11,9 @@ export default {
         visited: '#3b82f6',
         path: '#fbbf24',
         wall: '#1f2937',
-        'dark-bg': '#0f172a', // Slate-900
-        'dark-panel': '#1e293b', // Slate-800
+        weight: '#78350f', // Amber-900 (Mud)
+        'dark-bg': '#0f172a',
+        'dark-panel': '#1e293b',
       },
       animation: {
         'pop': 'pop 0.3s ease-out forwards',
