@@ -1,27 +1,30 @@
-// src/components/Grid.jsx
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { clsx } from 'clsx';
 import { Node } from './Node';
-import { runAlgorithm } from '../algorithms';
+import { runAlgorithm, generateMazeRecursiveDivision } from '../algorithms';
 
-const START_ROW = 5;
-const START_COL = 5;
-const FINISH_ROW = 10;
-const FINISH_COL = 35;
+const START_NODE_ROW = 5;
+const START_NODE_COL = 5;
+const FINISH_NODE_ROW = 5;
+const FINISH_NODE_COL = 25;
 
-const createNode = (col, row) => ({
-  col,
-  row,
-  isStart: row === START_ROW && col === START_COL,
-  isFinish: row === FINISH_ROW && col === FINISH_COL,
-  distance: Infinity,
-  totalDistance: Infinity, // For A*
-  isVisited: false,
-  isWall: false,
-  previousNode: null,
-});
+const createNode = (col, row) => {
+  return {
+    col,
+    row,
+    isStart: row === START_NODE_ROW && col === START_NODE_COL,
+    isFinish: row === FINISH_NODE_ROW && col === FINISH_NODE_COL,
+    distance: Infinity,
+    g: Infinity, 
+    f: Infinity,
+    isVisited: false,
+    isWall: false,
+    previousNode: null,
+    nextNode: null, // For bidirectional
+  };
+};
 
-const getInitialGrid = (rows = 20, cols = 50) => {
+const getInitialGrid = (rows = 15, cols = 40) => {
   const grid = [];
   for (let row = 0; row < rows; row++) {
     const currentRow = [];
@@ -38,16 +41,14 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
   const [executionTime, setExecutionTime] = useState(0);
 
-  // Sync with master grid
+  // Sync with master grid if in comparison mode
   useEffect(() => {
     if (masterGridState && isComparison) {
         const newGrid = masterGridState.map(row => 
             row.map(node => ({
                 ...node, 
-                distance: Infinity, 
-                totalDistance: Infinity,
-                isVisited: false, 
-                previousNode: null
+                distance: Infinity, g: Infinity, f: Infinity,
+                isVisited: false, previousNode: null, nextNode: null
             }))
         );
         setGrid(newGrid);
@@ -55,26 +56,25 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   }, [masterGridState, isComparison]);
 
   const resetVisuals = () => {
+    // Clear DOM classes manually
     for (let row = 0; row < grid.length; row++) {
       for (let col = 0; col < grid[0].length; col++) {
         const suffix = isComparison ? '-comp' : '';
         const element = document.getElementById(`node-${row}-${col}${suffix}`);
         if(element) {
-            element.className = element.className
-                .replace('node-visited', '')
-                .replace('node-path', '');
+            // Keep wall/start/end classes, remove visited/path
+            element.classList.remove('node-visited', 'node-path');
         }
       }
     }
+    
     if(!isComparison) {
-       const newGrid = grid.map(row => row.map(node => ({
+       // Reset state values
+       setGrid(prev => prev.map(row => row.map(node => ({
            ...node, 
-           distance: Infinity, 
-           totalDistance: Infinity,
-           isVisited: false, 
-           previousNode: null
-       })));
-       setGrid(newGrid);
+           distance: Infinity, g: Infinity, f: Infinity,
+           isVisited: false, previousNode: null, nextNode: null
+       }))));
     }
     setExecutionTime(0);
   };
@@ -82,22 +82,21 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   useImperativeHandle(ref, () => ({
     animate() {
       resetVisuals();
-      const startNode = grid[START_ROW][START_COL];
-      const finishNode = grid[FINISH_ROW][FINISH_COL];
+      const startNode = grid[START_NODE_ROW][START_NODE_COL];
+      const finishNode = grid[FINISH_NODE_ROW][FINISH_NODE_COL];
       
       const startTime = performance.now();
       const { visitedNodesInOrder, path } = runAlgorithm(grid, startNode, finishNode, algoType);
       const endTime = performance.now();
+      
       const timeTaken = (endTime - startTime).toFixed(2);
       
-      // Speed up animation if in comparison mode to keep it snappy
-      const speed = isComparison ? 5 : 10;
-
+      // Animate Visited
       for (let i = 0; i <= visitedNodesInOrder.length; i++) {
         if (i === visitedNodesInOrder.length) {
           setTimeout(() => {
             animatePath(path, timeTaken);
-          }, speed * i);
+          }, 10 * i);
           return;
         }
         setTimeout(() => {
@@ -105,25 +104,33 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
           const suffix = isComparison ? '-comp' : '';
           const el = document.getElementById(`node-${node.row}-${node.col}${suffix}`);
           if(el && !node.isStart && !node.isFinish) el.classList.add('node-visited');
-        }, speed * i);
+        }, 10 * i);
       }
     },
     reset: resetVisuals,
-    // MAZE GENERATOR
     generateMaze() {
-        const newGrid = getInitialGrid().map(row => row.map(node => ({...node})));
-        // Simple Random Maze logic
-        for(let row=0; row<newGrid.length; row++){
-            for(let col=0; col<newGrid[0].length; col++){
-                if(newGrid[row][col].isStart || newGrid[row][col].isFinish) continue;
-                // 30% chance of wall
-                if(Math.random() < 0.3) {
-                    newGrid[row][col].isWall = true;
-                }
-            }
+        if(isComparison) return; // Only master can gen maze
+        resetVisuals();
+        const startNode = grid[START_NODE_ROW][START_NODE_COL];
+        const finishNode = grid[FINISH_NODE_ROW][FINISH_NODE_COL];
+        const wallNodes = generateMazeRecursiveDivision(grid, startNode, finishNode);
+        
+        // Animate Walls
+        for(let i = 0; i < wallNodes.length; i++) {
+            setTimeout(() => {
+                const node = wallNodes[i];
+                const newGrid = grid.slice();
+                newGrid[node.row][node.col].isWall = true;
+                setGrid([...newGrid]); // Trigger re-render to show wall
+                if(onGridUpdate) onGridUpdate(newGrid);
+            }, 10 * i);
         }
+    },
+    clearWalls() {
+        const newGrid = getInitialGrid();
         setGrid(newGrid);
         if(onGridUpdate) onGridUpdate(newGrid);
+        resetVisuals();
     }
   }));
 
@@ -144,7 +151,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   };
 
   const handleMouseDown = (row, col) => {
-    if(isComparison) return; 
+    if(isComparison) return;
     const newGrid = getNewGridWithWallToggled(grid, row, col);
     setGrid(newGrid);
     setMouseIsPressed(true);
@@ -162,31 +169,33 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
   return (
     <div className="flex flex-col items-center">
-      <div className="mb-2 flex justify-between w-full px-4 text-sm font-mono font-bold text-gray-600 dark:text-gray-300">
+       <div className="mb-1 flex justify-between w-full px-2 text-xs font-mono font-bold text-gray-600 dark:text-gray-300">
          <span className="uppercase">{algoType}</span>
-         {executionTime > 0 && <span className="text-green-600 dark:text-green-400">{executionTime}ms</span>}
+         {executionTime > 0 && <span className="text-green-600 dark:text-green-400">Time: {executionTime}ms</span>}
       </div>
-      
-      {/* Container: Gap-0 for no spaces */}
-      <div className="bg-white dark:bg-gray-800 p-1 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700">
+      {/* GAP REMOVED: 
+        We use flex-wrap with no gap. 
+        Each node is a block. 
+        Leading-none ensures no line-height gaps.
+      */}
+      <div className="bg-white dark:bg-dark-panel p-1 rounded shadow-xl border border-gray-200 dark:border-gray-700 leading-[0]">
         {grid.map((row, rowIdx) => (
           <div key={rowIdx} className="flex">
             {row.map((node, nodeIdx) => {
               const { row, col, isFinish, isStart, isWall } = node;
+              const suffix = isComparison ? '-comp' : '';
               return (
-                <div key={nodeIdx} id={isComparison ? `wrapper-${row}-${col}-comp` : `wrapper-${row}-${col}`}>
-                    <Node
-                        row={row}
-                        col={col}
-                        isStart={isStart}
-                        isFinish={isFinish}
-                        isWall={isWall}
-                        isCompact={isComparison} // Pass isComparison to shrink nodes
-                        onMouseDown={handleMouseDown}
-                        onMouseEnter={handleMouseEnter}
+                    <div
+                        key={nodeIdx}
+                        id={`node-${row}-${col}${suffix}`}
+                        className={clsx(
+                            "w-6 h-6 border-[0.5px] border-blue-50/20 inline-block select-none", // Reduced border width
+                            isFinish ? 'node-end' : isStart ? 'node-start' : isWall ? 'node-wall' : ''
+                        )}
+                        onMouseDown={() => handleMouseDown(row, col)}
+                        onMouseEnter={() => handleMouseEnter(row, col)}
                         onMouseUp={handleMouseUp}
-                    />
-                </div>
+                    ></div>
               );
             })}
           </div>
@@ -199,11 +208,8 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 const getNewGridWithWallToggled = (grid, row, col) => {
   const newGrid = grid.slice();
   const node = newGrid[row][col];
-  if(node.isStart || node.isFinish) return newGrid; 
-  const newNode = {
-    ...node,
-    isWall: !node.isWall,
-  };
+  if(node.isStart || node.isFinish) return newGrid;
+  const newNode = { ...node, isWall: !node.isWall };
   newGrid[row][col] = newNode;
   return newGrid;
 };
