@@ -11,10 +11,13 @@ export default {
         visited: '#3b82f6',
         path: '#fbbf24',
         wall: '#1f2937',
-        weight: '#78350f', // Amber-900 (Mud)
+        mud: '#78350f',    // Cost 5
+        forest: '#14532d', // Cost 3 (Green-900)
+        water: '#2563eb',  // Cost 10 (Blue-600)
         'dark-bg': '#0f172a',
         'dark-panel': '#1e293b',
       },
+      // ... (Keep existing animations/keyframes)
       animation: {
         'pop': 'pop 0.3s ease-out forwards',
         'path': 'grow 0.5s ease-out forwards',
