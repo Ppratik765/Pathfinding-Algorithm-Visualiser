@@ -1,6 +1,7 @@
-// src/algorithms.js
+/* src/algorithms.js */
 
-// --- HELPERS ---
+/* ================= HELPER FUNCTIONS ================= */
+
 const getNeighbors = (node, grid) => {
   const neighbors = [];
   const { row, col } = node;
@@ -17,7 +18,11 @@ const manhattanDistance = (nodeA, nodeB) => {
 
 const getAllNodes = (grid) => {
   const nodes = [];
-  for (const row of grid) for (const node of row) nodes.push(node);
+  for (const row of grid) {
+    for (const node of row) {
+      nodes.push(node);
+    }
+  }
   return nodes;
 };
 
@@ -32,39 +37,47 @@ export const getNodesInShortestPathOrder = (finishNode) => {
 };
 
 /* ================= ALGORITHMS ================= */
-// Note: BFS and DFS ignore weights by definition (unweighted graphs).
-// Dijkstra, A*, and Greedy will use node.weight.
 
 export const runAlgorithm = (grid, startNode, finishNode, algoType) => {
   switch (algoType) {
     case 'dijkstra': return dijkstra(grid, startNode, finishNode);
     case 'astar': return aStar(grid, startNode, finishNode);
-    case 'bfs': return bfs(grid, startNode, finishNode); // Unweighted
-    case 'dfs': return dfs(grid, startNode, finishNode); // Unweighted
+    case 'bfs': return bfs(grid, startNode, finishNode);
+    case 'dfs': return dfs(grid, startNode, finishNode);
     case 'greedy': return greedyBestFirst(grid, startNode, finishNode);
-    case 'bidirectional': return bidirectionalBFS(grid, startNode, finishNode); // Unweighted
+    case 'bidirectional': return bidirectionalBFS(grid, startNode, finishNode);
     default: return dijkstra(grid, startNode, finishNode);
   }
 };
+
+// --- Weighted Algorithms (Dijkstra, A*, Greedy) ---
 
 function dijkstra(grid, startNode, finishNode) {
   const visitedNodesInOrder = [];
   startNode.distance = 0;
   const unvisitedNodes = getAllNodes(grid);
-
   while (unvisitedNodes.length) {
     unvisitedNodes.sort((a, b) => a.distance - b.distance);
     const closestNode = unvisitedNodes.shift();
-
     if (closestNode.isWall) continue;
     if (closestNode.distance === Infinity) return { visitedNodesInOrder, path: [] };
-
+    
     closestNode.isVisited = true;
     visitedNodesInOrder.push(closestNode);
-
     if (closestNode === finishNode) return { visitedNodesInOrder, path: getNodesInShortestPathOrder(finishNode) };
-
-    updateUnvisitedNeighbors(closestNode, grid, finishNode, 'dijkstra');
+    
+    const neighbors = getNeighbors(closestNode, grid);
+    for (const neighbor of neighbors) {
+      if (!neighbor.isVisited) {
+        // WEIGHT LOGIC: Normal = 1, Mud = 5, Forest = 10, Water = 50
+        const distanceToAdd = neighbor.weight || 1; 
+        const newDist = closestNode.distance + distanceToAdd;
+        if (newDist < neighbor.distance) {
+          neighbor.distance = newDist;
+          neighbor.previousNode = closestNode;
+        }
+      }
+    }
   }
 }
 
@@ -73,89 +86,70 @@ function aStar(grid, startNode, finishNode) {
   startNode.g = 0;
   startNode.f = manhattanDistance(startNode, finishNode);
   let openSet = [startNode];
-
+  
   while (openSet.length) {
     openSet.sort((a, b) => a.f - b.f);
     const closestNode = openSet.shift();
-
     if (closestNode.isWall) continue;
+    
     closestNode.isVisited = true;
     visitedNodesInOrder.push(closestNode);
-
     if (closestNode === finishNode) return { visitedNodesInOrder, path: getNodesInShortestPathOrder(finishNode) };
 
-    updateUnvisitedNeighbors(closestNode, grid, finishNode, 'astar', openSet);
+    const neighbors = getNeighbors(closestNode, grid);
+    for (const neighbor of neighbors) {
+      if (neighbor.isVisited) continue;
+      
+      const distanceToAdd = neighbor.weight || 1;
+      const tentativeG = closestNode.g + distanceToAdd;
+      
+      let inOpenSet = openSet.includes(neighbor);
+      if (!inOpenSet || tentativeG < neighbor.g) {
+        neighbor.g = tentativeG;
+        neighbor.h = neighbor.h || manhattanDistance(neighbor, finishNode); // Manhattan H
+        neighbor.f = neighbor.g + neighbor.h;
+        neighbor.previousNode = closestNode;
+        if (!inOpenSet) openSet.push(neighbor);
+      }
+    }
   }
   return { visitedNodesInOrder, path: [] };
 }
 
 function greedyBestFirst(grid, startNode, finishNode) {
     const visitedNodesInOrder = [];
-    startNode.distance = manhattanDistance(startNode, finishNode); // Use distance prop for priority
+    startNode.distance = manhattanDistance(startNode, finishNode);
     let openSet = [startNode];
 
     while(openSet.length) {
-        openSet.sort((a,b) => a.distance - b.distance);
+        openSet.sort((a,b) => a.distance - b.distance); // Only heuristic matters for Greedy
         const currentNode = openSet.shift();
 
         if (currentNode.isWall) continue;
-        if (currentNode.isVisited) continue; // Greedy can revisit but simple version doesn't needs to
+        if (currentNode.isVisited) continue;
 
         currentNode.isVisited = true;
         visitedNodesInOrder.push(currentNode);
 
         if (currentNode === finishNode) return { visitedNodesInOrder, path: getNodesInShortestPathOrder(finishNode) };
 
-        updateUnvisitedNeighbors(currentNode, grid, finishNode, 'greedy', openSet);
-    }
-    return { visitedNodesInOrder, path: [] };
-}
-
-// Unified Neighbor Updater for Weighted Algos
-function updateUnvisitedNeighbors(node, grid, finishNode, algo, openSet = []) {
-    const neighbors = getNeighbors(node, grid);
-    for (const neighbor of neighbors) {
-        if (neighbor.isVisited) continue;
-
-        // COST LOGIC:
-        // Basic movement cost is 1.
-        // If the neighbor is "Mud" (weight 5), cost is 5.
-        // If "Forest" (weight 10), cost is 10.
-        // BFS/DFS/Bidirectional will ignore this and assume 1.
-        const moveCost = neighbor.weight; 
-
-        if (algo === 'dijkstra') {
-            const newDist = node.distance + moveCost;
-            if (newDist < neighbor.distance) {
-                neighbor.distance = newDist;
-                neighbor.previousNode = node;
-            }
-        } else if (algo === 'astar') {
-            const tentativeG = node.g + moveCost;
-            // Check if better path
-            let inOpenSet = openSet.includes(neighbor);
-            if (!inOpenSet || tentativeG < neighbor.g) {
-                neighbor.g = tentativeG;
-                neighbor.h = neighbor.h || manhattanDistance(neighbor, finishNode);
-                neighbor.f = neighbor.g + neighbor.h; // A* = g + h
-                neighbor.previousNode = node;
-                if (!inOpenSet) openSet.push(neighbor);
-            }
-        } else if (algo === 'greedy') {
-            // Greedy ignores weight cost (g), only cares about heuristic (h)
-            // But we add it to visited logic
-            if(!openSet.includes(neighbor)) {
-                neighbor.distance = manhattanDistance(neighbor, finishNode);
-                neighbor.previousNode = node;
+        const neighbors = getNeighbors(currentNode, grid);
+        for(const neighbor of neighbors) {
+            if(!neighbor.isVisited) {
+                // Greedy ignores edge weights for movement cost, but we still track it
+                neighbor.distance = manhattanDistance(neighbor, finishNode); 
+                neighbor.previousNode = currentNode;
                 openSet.push(neighbor);
             }
         }
     }
+    return { visitedNodesInOrder, path: [] };
 }
 
-// --- UNWEIGHTED ALGOS (BFS, DFS, Bidirectional) ---
-// (Copy previous BFS, DFS, Bidirectional code here exactly as before. 
-//  They do NOT use the `weight` property, ensuring they fail to handle mud properly - which is the goal!)
+// --- Unweighted Algorithms (BFS, DFS, Bidirectional) ---
+// Note: BFS/DFS technically ignore weights, they just count steps (edges).
+// This highlights why Dijkstra/A* are better for weighted graphs.
+
 function bfs(grid, startNode, finishNode) {
   const visitedNodesInOrder = [];
   const queue = [startNode];
@@ -198,6 +192,7 @@ function dfs(grid, startNode, finishNode) {
 }
 
 function bidirectionalBFS(grid, startNode, finishNode) {
+    // Unweighted Bidirectional
     const visitedNodesInOrder = [];
     const startQueue = [startNode];
     const endQueue = [finishNode];
@@ -240,71 +235,170 @@ function bidirectionalBFS(grid, startNode, finishNode) {
     }
     return { visitedNodesInOrder, path: [] };
 }
+
 function mergeBidirectionalPath(meetNodeStartSide, meetNodeEndSide, visitedNodes) {
     const path = [];
     let curr = meetNodeStartSide;
-    while(curr !== null) { path.unshift(curr); curr = curr.previousNode; }
+    while(curr !== null) {
+        path.unshift(curr);
+        curr = curr.previousNode;
+    }
     curr = meetNodeEndSide;
-    while(curr !== null) { path.push(curr); curr = curr.nextNode; }
+    while(curr !== null) {
+        path.push(curr);
+        curr = curr.nextNode;
+    }
     return { visitedNodesInOrder: visitedNodes, path };
 }
 
-/* ================= MAZE GENERATION: RANDOMIZED PRIM'S (Organic) ================= */
-export const generateMazePrims = (grid) => {
-    // 1. Reset Board to Walls
-    for(let row of grid) for(let node of row) node.isWall = true;
+/* ================= MAZE GENERATION ================= */
 
-    // 2. Pick random start
-    const startRow = Math.floor(Math.random() * grid.length);
-    const startCol = Math.floor(Math.random() * grid[0].length);
-    const startNode = grid[startRow][startCol];
-    startNode.isWall = false;
+// 1. Recursive Division (Blocky) - KEPT SAME
+export const generateMazeRecursiveDivision = (grid, startNode, finishNode) => {
+    // 1. Fill Grid with Walls
+    const walls = [];
+    // Reset weights before maze gen
+    for(let r=0; r<grid.length; r++) for(let c=0; c<grid[0].length; c++) grid[r][c].weight = 1;
+    
+    return computeWallsRecursive(grid, startNode, finishNode);
+};
 
-    // 3. Add neighbors to frontier
-    const frontier = [];
-    const addFrontier = (node) => {
-        const neighbors = [
-            node.row > 1 ? grid[node.row-2][node.col] : null,
-            node.row < grid.length-2 ? grid[node.row+2][node.col] : null,
-            node.col > 1 ? grid[node.row][node.col-2] : null,
-            node.col < grid[0].length-2 ? grid[node.row][node.col+2] : null,
-        ];
-        neighbors.forEach(n => {
-            if(n && n.isWall && !frontier.includes(n)) frontier.push(n);
-        });
-    };
-    addFrontier(startNode);
+function computeWallsRecursive(grid, startNode, finishNode) {
+    const height = grid.length;
+    const width = grid[0].length;
+    const mazeWalls = [];
+    const visited = new Set();
+    const stack = [];
+    
+    // DFS for recursive division shape
+    let current = startNode;
+    visited.add(`${current.row}-${current.col}`);
+    stack.push(current);
 
-    // 4. Loop
-    while(frontier.length) {
-        // Pick random frontier node
-        const randIdx = Math.floor(Math.random() * frontier.length);
-        const current = frontier[randIdx];
-        frontier.splice(randIdx, 1);
+    const emptySpaces = new Set();
+    emptySpaces.add(`${startNode.row}-${startNode.col}`);
+    emptySpaces.add(`${finishNode.row}-${finishNode.col}`);
 
-        // Find neighbors that are already part of the maze (not walls)
-        const neighbors = [
-            current.row > 1 ? grid[current.row-2][current.col] : null,
-            current.row < grid.length-2 ? grid[current.row+2][current.col] : null,
-            current.col > 1 ? grid[current.row][current.col-2] : null,
-            current.col < grid[0].length-2 ? grid[current.row][current.col+2] : null,
-        ].filter(n => n && !n.isWall);
+    while (stack.length) {
+        const curr = stack.pop();
+        const { row, col } = curr;
+        // Jump 2 to create walls between
+        const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5);
 
-        if(neighbors.length) {
-            const neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
-            // Carve path
-            current.isWall = false;
-            // Carve wall between
-            const midRow = current.row + (neighbor.row - current.row)/2;
-            const midCol = current.col + (neighbor.col - current.col)/2;
-            grid[midRow][midCol].isWall = false;
-            
-            addFrontier(current);
+        for (const [dr, dc] of dirs) {
+            const nr = row + dr;
+            const nc = col + dc;
+            const midR = row + (dr/2);
+            const midC = col + (dc/2);
+
+            if (nr >= 0 && nr < height && nc >= 0 && nc < width && !visited.has(`${nr}-${nc}`)) {
+                visited.add(`${nr}-${nc}`);
+                visited.add(`${midR}-${midC}`);
+                emptySpaces.add(`${nr}-${nc}`);
+                emptySpaces.add(`${midR}-${midC}`);
+                stack.push(grid[nr][nc]);
+                stack.push(curr); 
+            }
         }
     }
-    
-    // Return walls list (which is everything still true)
+
+    for(let r = 0; r < height; r++) {
+        for(let c = 0; c < width; c++) {
+            if(!emptySpaces.has(`${r}-${c}`)) {
+                const node = grid[r][c];
+                if(!node.isStart && !node.isFinish) {
+                    if (Math.random() > 0.1) mazeWalls.push(node); // 10% loops
+                }
+            }
+        }
+    }
+    return mazeWalls;
+}
+
+
+// 2. Randomized Prim's (Organic/River-like) - NEW!
+export const generateMazePrims = (grid, startNode, finishNode) => {
     const walls = [];
-    for(let row of grid) for(let node of row) if(node.isWall) walls.push(node);
-    return walls;
+    const height = grid.length;
+    const width = grid[0].length;
+    
+    // 1. Reset grid: Everything is a wall initially logic (conceptually)
+    // We will return a list of nodes that should remain walls.
+    // Prim's grows from a start node.
+    
+    const visited = new Set();
+    const frontier = []; // "Walls" to consider opening
+    const pathSet = new Set(); // Nodes that are effectively "Open" (white)
+
+    // Helper to add frontier
+    const addFrontier = (r, c) => {
+        if(r>=0 && r<height && c>=0 && c<width && !pathSet.has(`${r}-${c}`)) {
+            frontier.push({r, c});
+        }
+    }
+
+    // Start with Start Node
+    const startId = `${startNode.row}-${startNode.col}`;
+    pathSet.add(startId);
+    
+    // Add neighbors of start to frontier (Distance 2)
+    [[0, -2], [0, 2], [-2, 0], [2, 0]].forEach(([dr, dc]) => {
+         addFrontier(startNode.row + dr, startNode.col + dc);
+    });
+
+    while (frontier.length > 0) {
+        // Pick random frontier node
+        const randIdx = Math.floor(Math.random() * frontier.length);
+        const {r, c} = frontier[randIdx];
+        frontier.splice(randIdx, 1); // remove
+
+        if (pathSet.has(`${r}-${c}`)) continue;
+
+        // Find neighbors of this frontier node that are ALREADY in the path
+        const neighborsInPath = [];
+        [[0, -2], [0, 2], [-2, 0], [2, 0]].forEach(([dr, dc]) => {
+            const nr = r + dr;
+            const nc = c + dc;
+            if (nr >= 0 && nr < height && nc >= 0 && nc < width && pathSet.has(`${nr}-${nc}`)) {
+                neighborsInPath.push({nr, nc, dr, dc});
+            }
+        });
+
+        if (neighborsInPath.length > 0) {
+            // Connect to one random neighbor
+            const connection = neighborsInPath[Math.floor(Math.random() * neighborsInPath.length)];
+            
+            // Mark frontier as path
+            pathSet.add(`${r}-${c}`);
+            
+            // Mark the wall IN BETWEEN as path
+            const wallR = r + (connection.dr / 2) * -1; // vector math logic reversed
+            const wallC = c + (connection.dc / 2) * -1;
+            pathSet.add(`${wallR}-${wallC}`);
+
+            // Add new frontiers from this node
+            [[0, -2], [0, 2], [-2, 0], [2, 0]].forEach(([dr, dc]) => {
+                 addFrontier(r + dr, c + dc);
+            });
+        }
+    }
+
+    // Ensure Finish Node is reachable (Prim's creates a Spanning Tree, so it should be, 
+    // but we need to ensure the specific cell is marked open if our grid logic missed it)
+    pathSet.add(`${finishNode.row}-${finishNode.col}`);
+
+    // Convert everything NOT in pathSet to a wall
+    const resultWalls = [];
+    for(let r = 0; r < height; r++) {
+        for(let c = 0; c < width; c++) {
+            if(!pathSet.has(`${r}-${c}`)) {
+                const node = grid[r][c];
+                if (!node.isStart && !node.isFinish) {
+                     // Add loops (10% chance to remove wall)
+                     if(Math.random() > 0.1) resultWalls.push(node);
+                }
+            }
+        }
+    }
+    return resultWalls;
 };
