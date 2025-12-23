@@ -1,12 +1,14 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { clsx } from 'clsx';
-import { Node } from './Node';
+import { RotateCcw } from 'lucide-react';
 import { runAlgorithm, generateMazeRecursiveDivision } from '../algorithms';
 
-const START_NODE_ROW = 5;
+const START_NODE_ROW = 8;
 const START_NODE_COL = 5;
-const FINISH_NODE_ROW = 5;
-const FINISH_NODE_COL = 25;
+const FINISH_NODE_ROW = 8;
+const FINISH_NODE_COL = 35;
+const ROW_COUNT = 20; 
+const COL_COUNT = 45; 
 
 const createNode = (col, row) => {
   return {
@@ -20,15 +22,15 @@ const createNode = (col, row) => {
     isVisited: false,
     isWall: false,
     previousNode: null,
-    nextNode: null, // For bidirectional
+    nextNode: null,
   };
 };
 
-const getInitialGrid = (rows = 15, cols = 40) => {
+const getInitialGrid = () => {
   const grid = [];
-  for (let row = 0; row < rows; row++) {
+  for (let row = 0; row < ROW_COUNT; row++) {
     const currentRow = [];
-    for (let col = 0; col < cols; col++) {
+    for (let col = 0; col < COL_COUNT; col++) {
       currentRow.push(createNode(col, row));
     }
     grid.push(currentRow);
@@ -36,10 +38,11 @@ const getInitialGrid = (rows = 15, cols = 40) => {
   return grid;
 };
 
-export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, masterGridState = null, onGridUpdate }, ref) => {
+export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, masterGridState = null, onGridUpdate, winStatus }, ref) => {
   const [grid, setGrid] = useState(getInitialGrid());
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
   const [executionTime, setExecutionTime] = useState(0);
+  const [showReplay, setShowReplay] = useState(false);
 
   // Sync with master grid if in comparison mode
   useEffect(() => {
@@ -55,33 +58,33 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     }
   }, [masterGridState, isComparison]);
 
-  const resetVisuals = () => {
-    // Clear DOM classes manually
-    for (let row = 0; row < grid.length; row++) {
-      for (let col = 0; col < grid[0].length; col++) {
-        const suffix = isComparison ? '-comp' : '';
-        const element = document.getElementById(`node-${row}-${col}${suffix}`);
-        if(element) {
-            // Keep wall/start/end classes, remove visited/path
-            element.classList.remove('node-visited', 'node-path');
-        }
+  const runAnimation = () => {
+      setShowReplay(false);
+      
+      // 1. Clear Visual Classes
+      const container = document.getElementById(`grid-container-${algoType}`);
+      if(container) {
+          const visited = container.querySelectorAll('.node-visited');
+          const paths = container.querySelectorAll('.node-path');
+          visited.forEach(el => el.classList.remove('node-visited'));
+          paths.forEach(el => el.classList.remove('node-path'));
       }
-    }
-    
-    if(!isComparison) {
-       // Reset state values
-       setGrid(prev => prev.map(row => row.map(node => ({
-           ...node, 
-           distance: Infinity, g: Infinity, f: Infinity,
-           isVisited: false, previousNode: null, nextNode: null
-       }))));
-    }
-    setExecutionTime(0);
-  };
 
-  useImperativeHandle(ref, () => ({
-    animate() {
-      resetVisuals();
+      // 2. CRITICAL FIX: Soft Reset Data Structure
+      // We must reset the algorithm properties (visited, distance) on the existing grid objects
+      // so the algorithm can run again without needing a full React state reset.
+      for (let row of grid) {
+          for (let node of row) {
+              node.distance = Infinity;
+              node.g = Infinity;
+              node.f = Infinity;
+              node.isVisited = false;
+              node.previousNode = null;
+              node.nextNode = null;
+              // Note: We DO NOT reset isWall, isStart, or isFinish
+          }
+      }
+
       const startNode = grid[START_NODE_ROW][START_NODE_COL];
       const finishNode = grid[FINISH_NODE_ROW][FINISH_NODE_COL];
       
@@ -91,62 +94,94 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
       
       const timeTaken = (endTime - startTime).toFixed(2);
       
-      // Animate Visited
       for (let i = 0; i <= visitedNodesInOrder.length; i++) {
         if (i === visitedNodesInOrder.length) {
           setTimeout(() => {
             animatePath(path, timeTaken);
-          }, 10 * i);
+          }, 5 * i);
           return;
         }
         setTimeout(() => {
           const node = visitedNodesInOrder[i];
-          const suffix = isComparison ? '-comp' : '';
-          const el = document.getElementById(`node-${node.row}-${node.col}${suffix}`);
+          const el = document.getElementById(`node-${algoType}-${node.row}-${node.col}`);
           if(el && !node.isStart && !node.isFinish) el.classList.add('node-visited');
-        }, 10 * i);
+        }, 5 * i);
       }
+  };
+
+  useImperativeHandle(ref, () => ({
+    animate() {
+      runAnimation();
     },
-    reset: resetVisuals,
+    reset: () => {
+        setExecutionTime(0);
+        setShowReplay(false);
+        const container = document.getElementById(`grid-container-${algoType}`);
+        if(container) {
+            const visited = container.querySelectorAll('.node-visited');
+            const paths = container.querySelectorAll('.node-path');
+            visited.forEach(el => el.classList.remove('node-visited'));
+            paths.forEach(el => el.classList.remove('node-path'));
+        }
+        if(!isComparison) {
+            setGrid(getInitialGrid()); // Full reset for master
+        }
+    },
+    clearWalls: () => {
+        setGrid(getInitialGrid());
+        setExecutionTime(0);
+        setShowReplay(false);
+        const container = document.getElementById(`grid-container-${algoType}`);
+        if(container) {
+            const visited = container.querySelectorAll('.node-visited');
+            const paths = container.querySelectorAll('.node-path');
+            visited.forEach(el => el.classList.remove('node-visited'));
+            paths.forEach(el => el.classList.remove('node-path'));
+        }
+    },
     generateMaze() {
-        if(isComparison) return; // Only master can gen maze
-        resetVisuals();
+        if(isComparison) return;
+        setExecutionTime(0);
+        setShowReplay(false);
+        
+        // Clear visuals
+        const container = document.getElementById(`grid-container-${algoType}`);
+        if(container) {
+            const visited = container.querySelectorAll('.node-visited');
+            const paths = container.querySelectorAll('.node-path');
+            visited.forEach(el => el.classList.remove('node-visited'));
+            paths.forEach(el => el.classList.remove('node-path'));
+        }
+
         const startNode = grid[START_NODE_ROW][START_NODE_COL];
         const finishNode = grid[FINISH_NODE_ROW][FINISH_NODE_COL];
-        const wallNodes = generateMazeRecursiveDivision(grid, startNode, finishNode);
+        const wallNodes = generateMazeRecursiveDivision(getInitialGrid(), startNode, finishNode);
         
-        // Animate Walls
         for(let i = 0; i < wallNodes.length; i++) {
             setTimeout(() => {
                 const node = wallNodes[i];
                 const newGrid = grid.slice();
                 newGrid[node.row][node.col].isWall = true;
-                setGrid([...newGrid]); // Trigger re-render to show wall
+                setGrid([...newGrid]);
                 if(onGridUpdate) onGridUpdate(newGrid);
-            }, 10 * i);
+            }, 5 * i);
         }
     },
-    clearWalls() {
-        const newGrid = getInitialGrid();
-        setGrid(newGrid);
-        if(onGridUpdate) onGridUpdate(newGrid);
-        resetVisuals();
-    }
   }));
 
   const animatePath = (nodesInShortestPathOrder, timeTaken) => {
     for (let i = 0; i < nodesInShortestPathOrder.length; i++) {
       setTimeout(() => {
         const node = nodesInShortestPathOrder[i];
-        const suffix = isComparison ? '-comp' : '';
-        const el = document.getElementById(`node-${node.row}-${node.col}${suffix}`);
+        const el = document.getElementById(`node-${algoType}-${node.row}-${node.col}`);
         if(el && !node.isStart && !node.isFinish) el.classList.add('node-path');
         
-        if(i === nodesInShortestPathOrder.length - 1 && onFinish) {
-            onFinish(parseFloat(timeTaken));
+        if(i === nodesInShortestPathOrder.length - 1) {
             setExecutionTime(timeTaken);
+            setShowReplay(true);
+            if(onFinish) onFinish(algoType, parseFloat(timeTaken));
         }
-      }, 40 * i);
+      }, 30 * i);
     }
   };
 
@@ -157,40 +192,54 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     setMouseIsPressed(true);
     if(onGridUpdate) onGridUpdate(newGrid);
   };
-
   const handleMouseEnter = (row, col) => {
     if (!mouseIsPressed || isComparison) return;
     const newGrid = getNewGridWithWallToggled(grid, row, col);
     setGrid(newGrid);
     if(onGridUpdate) onGridUpdate(newGrid);
   };
-
   const handleMouseUp = () => setMouseIsPressed(false);
 
+  const borderClass = winStatus === 'winner' ? 'ring-4 ring-green-500 shadow-green-500/50' 
+                   : winStatus === 'loser' ? 'ring-4 ring-red-500 shadow-red-500/50'
+                   : 'border border-gray-200 dark:border-gray-700';
+
   return (
-    <div className="flex flex-col items-center">
-       <div className="mb-1 flex justify-between w-full px-2 text-xs font-mono font-bold text-gray-600 dark:text-gray-300">
+    <div className="flex flex-col items-center relative group">
+       {/* Timer moved slightly up with mb-0.5 and tight line-height */}
+       <div className="mb-0.5 flex justify-between w-full px-1 text-[10px] sm:text-xs font-mono font-bold text-gray-600 dark:text-gray-300 leading-tight">
          <span className="uppercase">{algoType}</span>
-         {executionTime > 0 && <span className="text-green-600 dark:text-green-400">Time: {executionTime}ms</span>}
+         <span className={clsx("transition-opacity duration-300", executionTime > 0 ? "opacity-100" : "opacity-0", 
+             winStatus === 'winner' ? 'text-green-600 dark:text-green-400 font-extrabold' : 'text-gray-600 dark:text-gray-400'
+         )}>
+            {executionTime}ms
+         </span>
       </div>
-      {/* GAP REMOVED: 
-        We use flex-wrap with no gap. 
-        Each node is a block. 
-        Leading-none ensures no line-height gaps.
-      */}
-      <div className="bg-white dark:bg-dark-panel p-1 rounded shadow-xl border border-gray-200 dark:border-gray-700 leading-[0]">
+
+      <div 
+        id={`grid-container-${algoType}`}
+        className={clsx("bg-white dark:bg-dark-panel p-1 rounded shadow-xl leading-[0] relative transition-all duration-500", borderClass)}
+      >
+        {showReplay && (
+            <button onClick={runAnimation} className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-[1px] transition-all opacity-0 hover:opacity-100 group-hover:opacity-100">
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-2xl transform hover:scale-110 transition-transform">
+                    <RotateCcw size={24} className="text-blue-600 dark:text-blue-400" />
+                </div>
+            </button>
+        )}
+
         {grid.map((row, rowIdx) => (
           <div key={rowIdx} className="flex">
             {row.map((node, nodeIdx) => {
               const { row, col, isFinish, isStart, isWall } = node;
-              const suffix = isComparison ? '-comp' : '';
+              const wallClass = isWall ? 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white' : '';
               return (
                     <div
                         key={nodeIdx}
-                        id={`node-${row}-${col}${suffix}`}
+                        id={`node-${algoType}-${row}-${col}`}
                         className={clsx(
-                            "w-6 h-6 border-[0.5px] border-blue-50/20 inline-block select-none", // Reduced border width
-                            isFinish ? 'node-end' : isStart ? 'node-start' : isWall ? 'node-wall' : ''
+                            "w-5 h-5 border-[0.5px] border-blue-50/20 inline-block select-none", 
+                            isFinish ? 'node-end' : isStart ? 'node-start' : wallClass
                         )}
                         onMouseDown={() => handleMouseDown(row, col)}
                         onMouseEnter={() => handleMouseEnter(row, col)}
