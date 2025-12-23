@@ -1,46 +1,45 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { clsx } from 'clsx';
 import { RotateCcw } from 'lucide-react';
-import { runAlgorithm, generateMazeRecursiveDivision, generateMazePrims } from '../algorithms';
+import { runAlgorithm, generateMazeRecursiveDivision } from '../algorithms';
 
 const ROW_COUNT = 20; 
 const COL_COUNT = 45; 
 
-const createNode = (col, row, startR, startC, endR, endC) => {
+// WEIGHT_COST: 1 is normal, 5 is mud
+const MUD_WEIGHT = 5;
+
+const createNode = (col, row, startRow = 8, startCol = 5, finishRow = 8, finishCol = 35) => {
   return {
     col,
     row,
-    isStart: row === startR && col === startC,
-    isFinish: row === endR && col === endC,
+    isStart: row === startRow && col === startCol,
+    isFinish: row === finishRow && col === finishCol,
     distance: Infinity,
     g: Infinity, 
     f: Infinity,
     isVisited: false,
     isWall: false,
-    weight: 1, // 1 = Normal, 5 = Mud, 10 = Forest, 50 = Water
+    weight: 1, // Default weight
     previousNode: null,
     nextNode: null,
   };
 };
 
-const getInitialGrid = (startR, startC, endR, endC) => {
+const getInitialGrid = () => {
   const grid = [];
   for (let row = 0; row < ROW_COUNT; row++) {
     const currentRow = [];
     for (let col = 0; col < COL_COUNT; col++) {
-      currentRow.push(createNode(col, row, startR, startC, endR, endC));
+      currentRow.push(createNode(col, row));
     }
     grid.push(currentRow);
   }
   return grid;
 };
 
-export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, masterGridState = null, onGridUpdate, winStatus, currentTool, is3D, mazeType }, ref) => {
-  // Dynamic Start/End Positions
-  const [startPos, setStartPos] = useState({ r: 8, c: 5 });
-  const [finishPos, setFinishPos] = useState({ r: 8, c: 35 });
-  
-  const [grid, setGrid] = useState(getInitialGrid(8, 5, 8, 35));
+export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, masterGridState = null, onGridUpdate, winStatus, drawMode, is3D }, ref) => {
+  const [grid, setGrid] = useState(getInitialGrid());
   const [mouseIsPressed, setMouseIsPressed] = useState(false);
   const [dragNode, setDragNode] = useState(null); // 'start' or 'finish'
   const [executionTime, setExecutionTime] = useState(0);
@@ -49,7 +48,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   // Sync with master grid if in comparison mode
   useEffect(() => {
     if (masterGridState && isComparison) {
-        // Deep copy visual state from master, but reset algorithmic state
+        // Deep copy visual state from master but reset algorithms
         const newGrid = masterGridState.map(row => 
             row.map(node => ({
                 ...node, 
@@ -58,23 +57,32 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
             }))
         );
         setGrid(newGrid);
-        
-        // Sync Start/End positions visually
-        // (We find them in the master grid to update local state if needed, 
-        // though strictly visual mapping handles it via isStart/isFinish props)
     }
   }, [masterGridState, isComparison]);
 
+  const findStartFinish = (currentGrid) => {
+      let start, finish;
+      for (let r of currentGrid) {
+          for (let n of r) {
+              if (n.isStart) start = n;
+              if (n.isFinish) finish = n;
+          }
+      }
+      return { start, finish };
+  };
+
   const runAnimation = () => {
       setShowReplay(false);
+      
       const container = document.getElementById(`grid-container-${algoType}`);
       if(container) {
-          container.querySelectorAll('.node-visited, .node-path').forEach(el => {
-              el.classList.remove('node-visited', 'node-path');
-          });
+          const visited = container.querySelectorAll('.node-visited');
+          const paths = container.querySelectorAll('.node-path');
+          visited.forEach(el => el.classList.remove('node-visited'));
+          paths.forEach(el => el.classList.remove('node-path'));
       }
 
-      // Soft reset data
+      // Soft Reset
       for (let row of grid) {
           for (let node of row) {
               node.distance = Infinity;
@@ -86,18 +94,20 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
           }
       }
 
-      // Find current start/end nodes based on state
-      const startNode = grid[startPos.r][startPos.c];
-      const finishNode = grid[finishPos.r][finishPos.c];
-      
+      const { start, finish } = findStartFinish(grid);
+      if (!start || !finish) return;
+
       const startTime = performance.now();
-      const { visitedNodesInOrder, path } = runAlgorithm(grid, startNode, finishNode, algoType);
+      const { visitedNodesInOrder, path } = runAlgorithm(grid, start, finish, algoType);
       const endTime = performance.now();
+      
       const timeTaken = (endTime - startTime).toFixed(2);
       
       for (let i = 0; i <= visitedNodesInOrder.length; i++) {
         if (i === visitedNodesInOrder.length) {
-          setTimeout(() => animatePath(path, timeTaken), 5 * i);
+          setTimeout(() => {
+            animatePath(path, timeTaken);
+          }, 5 * i);
           return;
         }
         setTimeout(() => {
@@ -109,45 +119,64 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
   };
 
   useImperativeHandle(ref, () => ({
-    animate: runAnimation,
+    animate() { runAnimation(); },
     reset: () => {
         setExecutionTime(0);
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
-        if(container) container.querySelectorAll('.node-visited, .node-path').forEach(el => el.classList.remove('node-visited', 'node-path'));
+        if(container) {
+            const visited = container.querySelectorAll('.node-visited');
+            const paths = container.querySelectorAll('.node-path');
+            visited.forEach(el => el.classList.remove('node-visited'));
+            paths.forEach(el => el.classList.remove('node-path'));
+        }
         if(!isComparison) {
-            // Keep walls/weights but reset algorithm
-            setGrid(prev => prev.map(row => row.map(node => ({...node, distance: Infinity, isVisited: false}))));
+            setGrid(getInitialGrid()); 
         }
     },
     clearWalls: () => {
-        setGrid(getInitialGrid(startPos.r, startPos.c, finishPos.r, finishPos.c));
+        // Keeps start/end where they are, but removes walls/weights
+        const { start, finish } = findStartFinish(grid);
+        const newGrid = getInitialGrid().map(row => 
+            row.map(node => {
+                // Restore current start/end positions
+                const isS = node.row === start.row && node.col === start.col;
+                const isF = node.row === finish.row && node.col === finish.col;
+                return { ...node, isStart: isS, isFinish: isF };
+            })
+        );
+        setGrid(newGrid);
         setExecutionTime(0);
         setShowReplay(false);
         const container = document.getElementById(`grid-container-${algoType}`);
-        if(container) container.querySelectorAll('.node-visited, .node-path').forEach(el => el.classList.remove('node-visited', 'node-path'));
+        if(container) {
+            container.querySelectorAll('.node-visited, .node-path').forEach(el => 
+                el.classList.remove('node-visited', 'node-path')
+            );
+        }
+        if(onGridUpdate) onGridUpdate(newGrid);
     },
     generateMaze() {
         if(isComparison) return;
         setExecutionTime(0);
         setShowReplay(false);
-        const container = document.getElementById(`grid-container-${algoType}`);
-        if(container) container.querySelectorAll('.node-visited, .node-path').forEach(el => el.classList.remove('node-visited', 'node-path'));
-
-        // Choose Maze Algo
-        const mazeFunc = mazeType === 'prims' ? generateMazePrims : generateMazeRecursiveDivision;
         
-        const startNode = grid[startPos.r][startPos.c];
-        const finishNode = grid[finishPos.r][finishPos.c];
-        const wallNodes = mazeFunc(grid, startNode, finishNode);
+        // Clear visuals
+        const container = document.getElementById(`grid-container-${algoType}`);
+        if(container) {
+             container.querySelectorAll('.node-visited, .node-path').forEach(el => 
+                el.classList.remove('node-visited', 'node-path')
+            );
+        }
+
+        const { start, finish } = findStartFinish(grid);
+        const wallNodes = generateMazeRecursiveDivision(grid, start, finish);
         
         for(let i = 0; i < wallNodes.length; i++) {
             setTimeout(() => {
                 const node = wallNodes[i];
-                const newGrid = grid.slice(); // shallow copy
-                // Walls overwrite weights
+                const newGrid = grid.slice();
                 newGrid[node.row][node.col].isWall = true;
-                newGrid[node.row][node.col].weight = 1; 
                 setGrid([...newGrid]);
                 if(onGridUpdate) onGridUpdate(newGrid);
             }, 5 * i);
@@ -161,6 +190,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         const node = nodesInShortestPathOrder[i];
         const el = document.getElementById(`node-${algoType}-${node.row}-${node.col}`);
         if(el && !node.isStart && !node.isFinish) el.classList.add('node-path');
+        
         if(i === nodesInShortestPathOrder.length - 1) {
             setExecutionTime(timeTaken);
             setShowReplay(true);
@@ -170,13 +200,12 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     }
   };
 
-  // --- INTERACTION LOGIC ---
-
+  // --- MOUSE HANDLERS ---
   const handleMouseDown = (row, col) => {
     if(isComparison) return;
     const node = grid[row][col];
     
-    // Check if clicking Start or End
+    // Check if dragging start/end
     if (node.isStart) {
         setDragNode('start');
         setMouseIsPressed(true);
@@ -188,8 +217,8 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
         return;
     }
 
-    // Normal drawing
-    const newGrid = applyTool(grid, row, col, currentTool);
+    // Normal Draw
+    const newGrid = toggleNode(grid, row, col, drawMode);
     setGrid(newGrid);
     setMouseIsPressed(true);
     if(onGridUpdate) onGridUpdate(newGrid);
@@ -197,57 +226,24 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
   const handleMouseEnter = (row, col) => {
     if (!mouseIsPressed || isComparison) return;
-
+    
+    // Handle Dragging Nodes
     if (dragNode) {
-        // Moving Start/End
-        const newGrid = grid.slice();
-        const prevR = dragNode === 'start' ? startPos.r : finishPos.r;
-        const prevC = dragNode === 'start' ? startPos.c : finishPos.c;
-
-        // Don't overlap start and end
-        if (dragNode === 'start' && row === finishPos.r && col === finishPos.c) return;
-        if (dragNode === 'finish' && row === startPos.r && col === startPos.c) return;
-        if (grid[row][col].isWall) return; // Optional: Can't place start on wall
-
-        // Clear old pos
-        newGrid[prevR][prevC][dragNode === 'start' ? 'isStart' : 'isFinish'] = false;
-        // Set new pos
-        newGrid[row][col][dragNode === 'start' ? 'isStart' : 'isFinish'] = true;
-        
-        if (dragNode === 'start') setStartPos({r: row, c: col});
-        else setFinishPos({r: row, c: col});
-
-        setGrid([...newGrid]);
-        if(onGridUpdate) onGridUpdate(newGrid);
-    } else {
-        // Drawing
-        const newGrid = applyTool(grid, row, col, currentTool);
+        const newGrid = moveSpecialNode(grid, row, col, dragNode);
         setGrid(newGrid);
         if(onGridUpdate) onGridUpdate(newGrid);
+        return;
     }
+
+    // Handle Drawing
+    const newGrid = toggleNode(grid, row, col, drawMode);
+    setGrid(newGrid);
+    if(onGridUpdate) onGridUpdate(newGrid);
   };
 
   const handleMouseUp = () => {
-      setMouseIsPressed(false);
-      setDragNode(null);
-  };
-
-  const applyTool = (grid, row, col, tool) => {
-      const newGrid = grid.slice();
-      const node = newGrid[row][col];
-      if (node.isStart || node.isFinish) return newGrid;
-
-      // Reset
-      node.isWall = false;
-      node.weight = 1;
-
-      if (tool === 'wall') node.isWall = true;
-      else if (tool === 'mud') node.weight = 5;
-      else if (tool === 'forest') node.weight = 10;
-      else if (tool === 'water') node.weight = 50;
-      else if (tool === 'eraser') { /* already reset above */ }
-      
-      return newGrid;
+    setMouseIsPressed(false);
+    setDragNode(null);
   };
 
   const borderClass = winStatus === 'winner' ? 'ring-4 ring-green-500 shadow-green-500/50' 
@@ -255,7 +251,7 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
                    : 'border border-gray-200 dark:border-gray-700';
 
   return (
-    <div className={clsx("flex flex-col items-center relative group transition-all duration-700", is3D ? "perspective-1000" : "")}>
+    <div className="flex flex-col items-center relative group" style={{ perspective: '1000px' }}>
        <div className="mb-0.5 flex justify-between w-full px-1 text-[10px] sm:text-xs font-mono font-bold text-gray-600 dark:text-gray-300 leading-tight">
          <span className="uppercase">{algoType}</span>
          <span className={clsx("transition-opacity duration-300", executionTime > 0 ? "opacity-100" : "opacity-0", 
@@ -267,12 +263,13 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
 
       <div 
         id={`grid-container-${algoType}`}
+        // 3D Tilt Applied Here
         className={clsx(
             "bg-white dark:bg-dark-panel p-1 rounded shadow-xl leading-[0] relative transition-all duration-500", 
             borderClass,
-            is3D ? "transform-3d rotate-x-12 shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : ""
+            is3D && "transform rotate-x-12 scale-95 shadow-2xl"
         )}
-        style={is3D ? { transform: 'rotateX(20deg) scale(0.95)' } : {}}
+        style={is3D ? { transform: 'rotateX(25deg) scale(0.9)', transformStyle: 'preserve-3d' } : {}}
       >
         {showReplay && (
             <button onClick={runAnimation} className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 hover:bg-black/20 backdrop-blur-[1px] transition-all opacity-0 hover:opacity-100 group-hover:opacity-100">
@@ -287,30 +284,37 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
             {row.map((node, nodeIdx) => {
               const { row, col, isFinish, isStart, isWall, weight } = node;
               
-              // Dynamic Class Generation
-              let cellClass = "w-5 h-5 border-[0.5px] border-blue-50/20 inline-block select-none transition-transform duration-200 ";
-              
-              if (isStart) cellClass += "node-start ";
-              else if (isFinish) cellClass += "node-end ";
+              let extraClass = '';
+              if (isStart) extraClass = 'node-start cursor-grab active:cursor-grabbing z-20 scale-110';
+              else if (isFinish) extraClass = 'node-end cursor-grab active:cursor-grabbing z-20 scale-110';
               else if (isWall) {
-                  cellClass += "node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white ";
-                  if(is3D) cellClass += "transform translate-z-4 shadow-lg "; // Pop up walls in 3D
+                  extraClass = 'node-wall bg-gray-800 dark:bg-white border-gray-900 dark:border-white';
+                  if(is3D) extraClass += ' shadow-[2px_2px_0px_rgba(0,0,0,0.3)] transform translate-z-4'; // Pop up effect
               }
-              else if (weight === 5) cellClass += "bg-amber-700/50 dark:bg-amber-800/80 "; // Mud
-              else if (weight === 10) cellClass += "bg-emerald-700/50 dark:bg-emerald-800/80 "; // Forest
-              else if (weight === 50) cellClass += "bg-cyan-700/50 dark:bg-cyan-800/80 "; // Water
+              else if (weight > 1) {
+                  // MUD visual
+                  extraClass = 'bg-weight dark:bg-amber-900 border-amber-800 opacity-90';
+                  // Optional: Add an icon via background-image in CSS, but color is enough
+              }
 
               return (
                     <div
                         key={nodeIdx}
                         id={`node-${algoType}-${row}-${col}`}
-                        className={cellClass}
+                        className={clsx(
+                            "w-5 h-5 border-[0.5px] border-blue-50/20 inline-block select-none relative transition-transform", 
+                            extraClass
+                        )}
                         onMouseDown={() => handleMouseDown(row, col)}
                         onMouseEnter={() => handleMouseEnter(row, col)}
                         onMouseUp={handleMouseUp}
-                        // Tooltip for weights
-                        title={weight > 1 ? `Cost: ${weight}` : ''}
-                    ></div>
+                    >
+                        {weight > 1 && !isStart && !isFinish && !isWall && (
+                            <div className="w-full h-full flex items-center justify-center opacity-30 text-[8px]">
+                                ⨉
+                            </div>
+                        )}
+                    </div>
               );
             })}
           </div>
@@ -319,3 +323,49 @@ export const Grid = forwardRef(({ algoType, onFinish, isComparison = false, mast
     </div>
   );
 });
+
+// Helper: Toggle Wall or Weight
+const toggleNode = (grid, row, col, mode) => {
+  const newGrid = grid.slice();
+  const node = newGrid[row][col];
+  if(node.isStart || node.isFinish) return newGrid;
+  
+  const newNode = { ...node };
+  
+  if (mode === 'wall') {
+      newNode.isWall = !newNode.isWall;
+      newNode.weight = 1; // Wall overrides weight
+  } else if (mode === 'weight') {
+      newNode.isWall = false; // Weight overrides wall
+      newNode.weight = newNode.weight === 1 ? MUD_WEIGHT : 1;
+  }
+  
+  newGrid[row][col] = newNode;
+  return newGrid;
+};
+
+// Helper: Move Start or Finish
+const moveSpecialNode = (grid, row, col, type) => {
+    const newGrid = grid.slice();
+    const node = newGrid[row][col];
+    
+    if (node.isWall) return newGrid; // Can't drag onto wall
+    if (type === 'start' && node.isFinish) return newGrid;
+    if (type === 'finish' && node.isStart) return newGrid;
+
+    // Remove old special node
+    const currentGrid = newGrid.map(r => r.map(n => {
+        if (type === 'start' && n.isStart) return { ...n, isStart: false };
+        if (type === 'finish' && n.isFinish) return { ...n, isFinish: false };
+        return n;
+    }));
+
+    // Set new special node
+    currentGrid[row][col] = {
+        ...currentGrid[row][col],
+        isStart: type === 'start',
+        isFinish: type === 'finish'
+    };
+
+    return currentGrid;
+};
