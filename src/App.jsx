@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Grid } from './components/Grid';
-import { Play, RefreshCw, Moon, Sun, BrickWall, Eraser, MousePointer2, Plus, Minus, Info, Box, TentTree, Waves, Droplet } from 'lucide-react';
+import { Play, RefreshCw, Moon, Sun, BrickWall, Eraser, MousePointer2, Plus, Minus, Info, Box, TentTree, Waves } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function App() {
@@ -8,19 +8,20 @@ function App() {
   const [activeAlgos, setActiveAlgos] = useState(['dijkstra']);
   const [results, setResults] = useState({});
   const [masterGrid, setMasterGrid] = useState(null);
-  const [drawMode, setDrawMode] = useState('wall'); // 'wall', 'mud', 'forest', 'water'
+  const [drawMode, setDrawMode] = useState('wall'); 
   const [is3D, setIs3D] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   
   const gridRefs = useRef({});
 
+  // UPGRADE: Full Names
   const allAlgorithms = [
-      { value: 'dijkstra', label: 'Dijkstra' },
+      { value: 'dijkstra', label: 'Dijkstra Algorithm' },
       { value: 'astar', label: 'A* Search' },
-      { value: 'bfs', label: 'BFS' },
-      { value: 'dfs', label: 'DFS' },
-      { value: 'greedy', label: 'Greedy' },
-      { value: 'bidirectional', label: 'Bi-Direct' },
+      { value: 'bfs', label: 'Breadth-First Search (BFS)' },
+      { value: 'dfs', label: 'Depth-First Search (DFS)' },
+      { value: 'greedy', label: 'Greedy Best-First Search' },
+      { value: 'bidirectional', label: 'Bidirectional BFS' },
   ];
 
   useEffect(() => {
@@ -107,8 +108,8 @@ function App() {
         </div>
       </div>
 
-      {/* Control Bar - WIDENED */}
-      <div className="bg-white dark:bg-dark-panel p-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-wrap gap-2 items-center justify-between mb-4 w-[98%] max-w-7xl z-10 sticky top-2">
+      {/* Control Bar - Dynamic Width */}
+      <div className="bg-white dark:bg-dark-panel p-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-wrap gap-2 items-center justify-center mb-4 w-fit min-w-fit z-10 sticky top-2 transition-all duration-300">
         
         {/* Left Side: Drawing Tools */}
         <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1 flex-wrap justify-center">
@@ -127,10 +128,10 @@ function App() {
         </div>
 
         {/* Center: Algorithms */}
-        <div className="flex gap-1 items-center bg-gray-50 dark:bg-gray-800/50 p-1 rounded-lg border border-gray-200 dark:border-gray-700 flex-1 justify-center min-w-[200px]">
+        <div className="flex gap-1 items-center bg-gray-50 dark:bg-gray-800/50 p-1 rounded-lg border border-gray-200 dark:border-gray-700 flex-1 justify-center">
             {activeAlgos.map((currentAlgo, idx) => (
                 <select key={idx} value={currentAlgo} onChange={(e) => handleAlgoChange(idx, e.target.value)}
-                    className="px-1 py-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-24 sm:w-28"
+                    className="px-1 py-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none w-auto"
                 >
                     {allAlgorithms.map(opt => ((opt.value === currentAlgo || !activeAlgos.includes(opt.value)) && <option key={opt.value} value={opt.value}>{opt.label}</option>))}
                 </select>
